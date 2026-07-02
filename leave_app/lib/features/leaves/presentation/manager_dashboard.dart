@@ -3,8 +3,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:leave_app/features/leaves/services/leave_service.dart';
 
 class ManagerDashboard extends StatefulWidget {
+  const ManagerDashboard({super.key});
+
   @override
-  _ManagerDashboardState createState() => _ManagerDashboardState();
+  State<ManagerDashboard> createState() => _ManagerDashboardState();
 }
 
 class _ManagerDashboardState extends State<ManagerDashboard> {
@@ -15,7 +17,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("Espace Responsable (N+1)"),
+        title: const Text("Espace Responsable (N+1)"),
         backgroundColor: Colors.blueAccent,
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -25,10 +27,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator());
           }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(child: Text("Aucune demande de congé en attente."));
+            return const Center(child: Text("Aucune demande de congé en attente."));
           }
 
           var leaves = snapshot.data!.docs;
@@ -43,7 +45,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               var type = leave['type'] == 'annual' ? 'Annuel' : 'Sans Solde';
 
               return Card(
-                margin: EdgeInsets.all(10),
+                margin: const EdgeInsets.all(10),
                 elevation: 4,
                 child: ListTile(
                   title: Text("$employeeName - Congé $type"),
@@ -52,22 +54,22 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       IconButton(
-                        icon: Icon(Icons.check_circle, color: Colors.green, size: 30),
+                        icon: const Icon(Icons.check_circle, color: Colors.green, size: 30),
                         onPressed: () async {
                           await _leaveService.updateStatusByManager(leaveId, 'pending_rh');
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("Demande validée et envoyée aux RH !")),
+                            const SnackBar(content: Text("Demande validée et envoyée aux RH !")),
                           );
                         },
                       ),
                       IconButton(
-                        icon: Icon(Icons.cancel, color: Colors.red, size: 30),
+                        icon: const Icon(Icons.cancel, color: Colors.red, size: 30),
                         onPressed: () async {
                           await _leaveService.updateStatusByManager(leaveId, 'rejected_by_manager');
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("Demande refusée.")),
+                            const SnackBar(content: Text("Demande refusée.")),
                           );
                         },
                       ),

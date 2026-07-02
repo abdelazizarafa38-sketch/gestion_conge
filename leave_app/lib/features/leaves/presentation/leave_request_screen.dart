@@ -1,29 +1,32 @@
 import 'package:flutter/material.dart';
-import '../services/leave_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:leave_app/features/leaves/services/leave_service.dart';
 
 class LeaveRequestScreen extends StatefulWidget {
+  const LeaveRequestScreen({super.key});
+
   @override
-  _LeaveRequestScreenState createState() => _LeaveRequestScreenState();
+  State<LeaveRequestScreen> createState() => _LeaveRequestScreenState();
 }
 
 class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
   final LeaveService _leaveService = LeaveService();
   final _formKey = GlobalKey<FormState>();
   
-  String _leaveType = 'annual'; // 'annual' ou 'unpaid'
+  String _leaveType = 'annual';
   String _reason = '';
   DateTime _startDate = DateTime.now();
-  DateTime _endDate = DateTime.now().add(Duration(days: 2));
+  DateTime _endDate = DateTime.now().add(const Duration(days: 2));
 
   void _submit() async {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
-      String uid = FirebaseAuth.instance.currentUser!.uid;
       
-      // Envoi de la demande à Firestore via notre service
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return;
+      
       await _leaveService.submitLeaveRequest(
-        uid,
+        user.uid,
         "Abdelaziz", 
         _leaveType,
         _startDate,
@@ -31,8 +34,9 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
         _reason,
       );
 
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Demande soumise avec succès !')),
+        const SnackBar(content: Text('Demande soumise avec succès !')),
       );
       Navigator.pop(context);
     }
@@ -41,7 +45,7 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text("Nouvelle Demande de Congé")),
+      appBar: AppBar(title: const Text("Nouvelle Demande de Congé")),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Form(
@@ -50,50 +54,50 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
             children: [
               DropdownButtonFormField<String>(
                 value: _leaveType,
-                items: [
+                items: const [
                   DropdownMenuItem(value: 'annual', child: Text('Congé Annuel (Soldé)')),
                   DropdownMenuItem(value: 'unpaid', child: Text('Congé Sans Solde')),
                 ],
                 onChanged: (val) => setState(() => _leaveType = val!),
-                decoration: InputDecoration(labelText: "Type de congé"),
+                decoration: const InputDecoration(labelText: "Type de congé"),
               ),
-              SizedBox(height: 15),
+              const SizedBox(height: 15),
               TextFormField(
-                decoration: InputDecoration(labelText: "Motif du congé"),
-                validator: (val) => val!.isEmpty ? 'Veuillez entrer un motif' : null,
-                onSave: (val) => _reason = val!,
+                decoration: const InputDecoration(labelText: "Motif du congé"),
+                validator: (val) => val == null || val.isEmpty ? 'Veuillez entrer un motif' : null,
+                onSaved: (val) => _reason = val ?? '',
               ),
-              SizedBox(height: 20),
+              const SizedBox(height: 20),
               ListTile(
                 title: Text("Date de début : ${_startDate.toLocal()}".split(' ')[0]),
-                trailing: Icon(Icons.calendar_today),
+                trailing: const Icon(Icons.calendar_today),
                 onTap: () async {
                   DateTime? picked = await showDatePicker(
                     context: context,
                     initialDate: _startDate,
                     firstDate: DateTime.now(),
-                    lastDate: DateTime(2027),
+                    lastDate: DateTime(2028),
                   );
                   if (picked != null) setState(() => _startDate = picked);
                 },
               ),
               ListTile(
                 title: Text("Date de fin : ${_endDate.toLocal()}".split(' ')[0]),
-                trailing: Icon(Icons.calendar_today),
+                trailing: const Icon(Icons.calendar_today),
                 onTap: () async {
                   DateTime? picked = await showDatePicker(
                     context: context,
                     initialDate: _endDate,
                     firstDate: _startDate,
-                    lastDate: DateTime(2027),
+                    lastDate: DateTime(2028),
                   );
                   if (picked != null) setState(() => _endDate = picked);
                 },
               ),
-              SizedBox(height: 30),
+              const SizedBox(height: 30),
               ElevatedButton(
                 onPressed: _submit,
-                child: Text("Envoyer la demande"),
+                child: const Text("Envoyer la demande"),
               )
             ],
           ),
