@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../../leaves/presentation/manager_dashboard.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -10,29 +10,51 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _auth = FirebaseAuth.instance;
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
 
   void _login() async {
     setState(() => _isLoading = true);
     try {
-      await _auth.signInWithEmailAndPassword(
+      // 1. Authentification avec Firebase Auth
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const ManagerDashboard()),
+
+      String uid = userCredential.user!.uid;
+
+      // 2. Récupération du rôle de l'utilisateur dans Firestore
+      DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+
+      if (!context.mounted) return;
+
+      if (userDoc.exists) {
+        String role = userDoc['role'] ?? 'employee';
+
+        // 3. Redirection selon le rôle trouvé
+        if (role == 'manager') {
+          Navigator.pushReplacementNamed(context, '/manager_dashboard');
+        } else if (role == 'rh') {
+          Navigator.pushReplacementNamed(context, '/rh_dashboard');
+        } else {
+          Navigator.pushReplacementNamed(context, '/leave_request');
+        }
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Erreur : Aucun profil utilisateur trouvé dans la base.")),
         );
       }
     } catch (e) {
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Erreur : ${e.toString()}')),
+        SnackBar(content: Text("Erreur de connexion : ${e.toString()}")),
       );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (context.mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -48,6 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
             TextField(
               controller: _emailController,
               decoration: const InputDecoration(labelText: 'Email'),
+              keyboardType: TextInputType.emailAddress,
             ),
             TextField(
               controller: _passwordController,
@@ -65,5 +88,12 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 }
