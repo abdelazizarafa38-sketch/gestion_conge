@@ -34,7 +34,7 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
         _reason,
       );
 
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Demande soumise avec succès !')),
       );

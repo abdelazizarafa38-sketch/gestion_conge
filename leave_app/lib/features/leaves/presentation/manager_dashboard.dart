@@ -53,21 +53,23 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      // Bouton ACCEPTER
                       IconButton(
                         icon: const Icon(Icons.check_circle, color: Colors.green, size: 30),
                         onPressed: () async {
                           await _leaveService.updateStatusByManager(leaveId, 'pending_rh');
-                          if (!mounted) return;
+                          if (!context.mounted) return; // Correction linter ici
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text("Demande validée et envoyée aux RH !")),
                           );
                         },
                       ),
+                      // Bouton REFUSER
                       IconButton(
                         icon: const Icon(Icons.cancel, color: Colors.red, size: 30),
                         onPressed: () async {
                           await _leaveService.updateStatusByManager(leaveId, 'rejected_by_manager');
-                          if (!mounted) return;
+                          if (!context.mounted) return; // Correction linter ici
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text("Demande refusée.")),
                           );

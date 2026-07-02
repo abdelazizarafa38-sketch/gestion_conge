@@ -1,102 +1,52 @@
-import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:leave_app/features/leaves/services/leave_service.dart';
 
-class ManagerDashboard extends StatefulWidget {
-  @override
-  _ManagerDashboardState createState() => _ManagerDashboardState();
-}
-
-class _ManagerDashboardState extends State<ManagerDashboard> {
-  final LeaveService _leaveService = LeaveService();
+class LeaveService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text("Espace Responsable N+1"),
-        backgroundColor: Colors.blueAccent,
-      ),
-      body: StreamBuilder<QuerySnapshot>(
-        // On écoute en temps réel les congés en attente du Manager
-        stream: _db
-            .collection('leaves')
-            .where('status', isEqualTo: 'pending_manager')
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: CircularProgressIndicator());
-          }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(
-              child: Text(
-                "Aucune demande en attente.",
-                style: TextStyle(fontSize: 16, color: Colors.grey),
-              ),
-            );
-          }
+  // Soumettre une nouvelle demande de congé
+  Future<void> submitLeaveRequest(String employeeId, String name, String type, DateTime start, DateTime end, String reason) async {
+    await _db.collection('leaves').add({
+      'employeeId': employeeId,
+      'employeeName': name,
+      'type': type, 
+      'startDate': start,
+      'endDate': end,
+      'reason': reason,
+      'status': 'pending_manager', 
+      'comment': '',
+    });
+  }
 
-          var leaves = snapshot.data!.docs;
+  // Action intermédiaire du Responsable (N+1)
+  Future<void> updateStatusByManager(String leaveId, String newStatus) async {
+    await _db.collection('leaves').doc(leaveId).update({
+      'status': newStatus,
+    });
+  }
 
-          return ListView.builder(
-            itemCount: leaves.length,
-            itemBuilder: (context, index) {
-              var leave = leaves[index];
-              var leaveId = leave.id;
-              var employeeName = leave['employeeName'] ?? 'Employé';
-              var reason = leave['reason'] ?? 'Pas de motif';
-              var type = leave['type'] == 'annual' ? 'Annuel' : 'Sans Solde';
+  // Action finale des RH
+  Future<void> finalizeLeaveByRH(String leaveId, String employeeId, String leaveType, int durationInDays, bool isApproved) async {
+    DocumentReference leaveRef = _db.collection('leaves').doc(leaveId);
+    DocumentReference userRef = _db.collection('users').doc(employeeId);
 
-              return Card(
-                margin: EdgeInsets.symmetric(horizontal: 15, vertical: 8),
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: ListTile(
-                  contentPadding: EdgeInsets.all(10),
-                  title: Text(
-                    "$employeeName - Congé $type",
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Text("Motif : $reason"),
-                  ),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Bouton ACCEPTER
-                      IconButton(
-                        icon: Icon(Icons.check_circle, color: Colors.green, size: 32),
-                        onPressed: () async {
-                          await _leaveService.updateStatusByManager(leaveId, 'pending_rh');
-                          if (!mounted) return; // Sécurité asynchrone pour le context
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("Demande validée et envoyée aux RH !")),
-                          );
-                        },
-                      ),
-                      // Bouton REFUSER
-                      IconButton(
-                        icon: Icon(Icons.cancel, color: Colors.red, size: 32),
-                        onPressed: () async {
-                          await _leaveService.updateStatusByManager(leaveId, 'rejected_by_manager');
-                          if (!mounted) return; // Sécurité asynchrone pour le context
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("Demande refusée.")),
-                          );
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
-      ),
-    );
+    if (isApproved) {
+      await _db.runTransaction((transaction) async {
+        DocumentSnapshot userSnapshot = await transaction.get(userRef);
+        
+        if (!userSnapshot.exists) throw Exception("Utilisateur introuvable !");
+
+        if (leaveType == 'annual') {
+          int currentBalance = userSnapshot['annualLeaveBalance'] ?? 0;
+          transaction.update(userRef, {'annualLeaveBalance': currentBalance - durationInDays});
+        } else if (leaveType == 'unpaid') {
+          int currentUnpaid = userSnapshot['unpaidLeaveTaken'] ?? 0;
+          transaction.update(userRef, {'unpaidLeaveTaken': currentUnpaid + durationInDays});
+        }
+
+        transaction.update(leaveRef, {'status': 'approved'});
+      });
+    } else {
+      await leaveRef.update({'status': 'rejected_by_rh'});
+    }
   }
 }
