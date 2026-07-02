@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "896434172335",
+    "project_id": "leave-management-glsi",
+    "storage_bucket": "leave-management-glsi.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:896434172335:android:c1d269190fbab3e1faff5a",
+        "android_client_info": {
+          "package_name": "com.glsi.leavemanagement.leave_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCoptZ6AVkzU7tvAfchoW8oQttmY3j4X0g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
