@@ -1,62 +1,77 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../../auth/presentation/login_screen.dart';
+import 'package:leave_app/features/leaves/services/leave_service.dart';
 
-class ManagerDashboard extends StatelessWidget {
-  const ManagerDashboard({super.key});
+class ManagerDashboard extends StatefulWidget {
+  @override
+  _ManagerDashboardState createState() => _ManagerDashboardState();
+}
+
+class _ManagerDashboardState extends State<ManagerDashboard> {
+  final LeaveService _leaveService = LeaveService();
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dashboard Manager - Congés'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await FirebaseAuth.instance.signOut();
-              if (context.mounted) {
-                Navigator.of(context).pushReplacement(
-                  MaterialPageRoute(builder: (context) => const LoginScreen()),
-                );
-              }
-            },
-          ),
-        ],
+        title: Text("Espace Responsable (N+1)"),
+        backgroundColor: Colors.blueAccent,
       ),
       body: StreamBuilder<QuerySnapshot>(
-        // On écoute la collection 'leaves' dans Firestore en temps réel
-        stream: FirebaseFirestore.instance.collection('leaves').snapshots(),
+        stream: _db
+            .collection('leaves')
+            .where('status', isEqualTo: 'pending_manager')
+            .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(child: Text('Erreur : ${snapshot.error}'));
-          }
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return Center(child: Text("Aucune demande de congé en attente."));
           }
 
-          final docs = snapshot.data?.docs ?? [];
-
-          if (docs.isEmpty) {
-            return const Center(child: Text('Aucune demande de congé en attente.'));
-          }
+          var leaves = snapshot.data!.docs;
 
           return ListView.builder(
-            itemCount: docs.length,
+            itemCount: leaves.length,
             itemBuilder: (context, index) {
-              final data = docs[index].data() as Map<String, dynamic>;
+              var leave = leaves[index];
+              var leaveId = leave.id;
+              var employeeName = leave['employeeName'] ?? 'Employé';
+              var reason = leave['reason'] ?? 'Pas de motif';
+              var type = leave['type'] == 'annual' ? 'Annuel' : 'Sans Solde';
+
               return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                margin: EdgeInsets.all(10),
+                elevation: 4,
                 child: ListTile(
-                  title: Text(data['employeeName'] ?? 'Employé inconnu'),
-                  subtitle: Text('Raison : ${data['reason'] ?? 'Non spécifiée'}'),
-                  trailing: Text(
-                    data['status'] ?? 'En attente',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: data['status'] == 'Approuvé' ? Colors.green : Colors.orange,
-                    ),
+                  title: Text("$employeeName - Congé $type"),
+                  subtitle: Text("Motif : $reason"),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: Icon(Icons.check_circle, color: Colors.green, size: 30),
+                        onPressed: () async {
+                          await _leaveService.updateStatusByManager(leaveId, 'pending_rh');
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text("Demande validée et envoyée aux RH !")),
+                          );
+                        },
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.cancel, color: Colors.red, size: 30),
+                        onPressed: () async {
+                          await _leaveService.updateStatusByManager(leaveId, 'rejected_by_manager');
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text("Demande refusée.")),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ),
               );
