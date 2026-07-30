@@ -197,7 +197,7 @@ class _LeaveRequestScreenState extends State<LeaveRequestScreen> {
                         const Divider(height: 30),
 
                         DropdownButtonFormField<String>(
-                          value: _leaveType,
+                          initialValue: _leaveType,
                           decoration: const InputDecoration(
                             labelText: 'Type de congé',
                             border: OutlineInputBorder(),

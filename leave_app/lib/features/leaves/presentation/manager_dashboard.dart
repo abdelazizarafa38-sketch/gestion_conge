@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
@@ -10,38 +9,78 @@ class ManagerDashboard extends StatefulWidget {
 }
 
 class _ManagerDashboardState extends State<ManagerDashboard> {
-  // Fonction pour déconnecter le manager
-  Future<void> _logout() async {
-    await FirebaseAuth.instance.signOut();
-    if (!mounted) return;
-    Navigator.pushReplacementNamed(context, '/role_selection');
+  DateTime _parseDate(dynamic value) {
+    if (value is Timestamp) {
+      return value.toDate();
+    } else if (value is String) {
+      return DateTime.tryParse(value) ?? DateTime.now();
+    }
+    return DateTime.now();
   }
 
-  // Fonction pour changer le statut (Approuver / Refuser) + Calcul du solde
-  Future<void> _updateStatus({
-    required String docId,
-    required String newStatus,
-    required String userId,
-    required String typeConge,
-    required int nbJours,
-  }) async {
+  // Fonction pour mettre à jour le statut initial du manager (Accepté / Refusé)
+  Future<void> _updateManagerStatus(String docId, String status) async {
     try {
-      // 1. Mettre à jour le statut dans la collection 'leaves'
       await FirebaseFirestore.instance.collection('leaves').doc(docId).update({
-        'status': newStatus,
+        'managerStatus': status,
       });
-
-      // 2. Si le congé est approuvé ET payé, déduire du solde dans la collection 'users'
-      if (newStatus == 'Approuvé' && typeConge == 'paye') {
-        await FirebaseFirestore.instance.collection('users').doc(userId).update({
-          'soldeConges': FieldValue.increment(-nbJours),
-        });
-      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Statut mis à jour : $newStatus'),
+          content: Text('Demande $status avec succès !'),
+          backgroundColor: status == 'Accepté' ? Colors.green : Colors.red,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Erreur lors de la mise à jour : $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // Fonction pour modifier les dates du congé
+  Future<void> _editLeaveDates(
+    String docId,
+    DateTime currentStartDate,
+    DateTime currentEndDate,
+  ) async {
+    DateTime? pickedStartDate = await showDatePicker(
+      context: context,
+      initialDate: currentStartDate,
+      firstDate: DateTime(2025),
+      lastDate: DateTime(2030),
+      helpText: "Modifier la date de début",
+    );
+
+    if (!mounted) return;
+    if (pickedStartDate == null) return;
+
+    DateTime? pickedEndDate = await showDatePicker(
+      context: context,
+      initialDate: currentEndDate,
+      firstDate: pickedStartDate,
+      lastDate: DateTime(2030),
+      helpText: "Modifier la date de fin",
+    );
+
+    if (!mounted) return;
+    if (pickedEndDate == null) return;
+
+    try {
+      await FirebaseFirestore.instance.collection('leaves').doc(docId).update({
+        'startDate': Timestamp.fromDate(pickedStartDate),
+        'endDate': Timestamp.fromDate(pickedEndDate),
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Dates du congé modifiées avec succès !'),
           backgroundColor: Colors.green,
         ),
       );
@@ -49,8 +88,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Erreur : ${e.toString()}'),
-          backgroundColor: Colors.redAccent,
+          content: Text('Erreur lors de la modification : $e'),
+          backgroundColor: Colors.red,
         ),
       );
     }
@@ -60,13 +99,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Espace Responsable / Manager'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: _logout,
-          ),
-        ],
+        title: const Text('Espace Manager - Gestion des Congés'),
+        backgroundColor: const Color(0xFF3F51B5),
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('leaves').snapshots(),
@@ -76,58 +110,101 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           }
 
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text('Aucune demande de congé trouvée.'));
+            return const Center(
+              child: Text(
+                'Aucune demande de congé enregistrée.',
+                style: TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+            );
           }
 
-          final leavesDocs = snapshot.data!.docs;
+          final docs = snapshot.data!.docs;
 
           return ListView.builder(
-            itemCount: leavesDocs.length,
+            itemCount: docs.length,
             itemBuilder: (context, index) {
-              final data = leavesDocs[index].data() as Map<String, dynamic>;
-              final docId = leavesDocs[index].id;
+              final doc = docs[index];
+              final data = doc.data() as Map<String, dynamic>;
 
-              final String status = data['status'] ?? 'En attente';
-              final String typeConge = data['typeConge'] ?? 'paye';
-              final String userId = data['userId'] ?? '';
-              final int nbJours = data['nbJours'] ?? 1;
-              final String startDate = data['startDate'] ?? '';
-              final String endDate = data['endDate'] ?? '';
+              final employeeName = data['employeeName'] ?? 'Employé';
+              final reason = data['reason'] ?? 'Non spécifié';
+              final managerStatus = data['managerStatus'] ?? 'En attente';
+
+              DateTime startDate = _parseDate(data['startDate']);
+              DateTime endDate = _parseDate(data['endDate']);
+
+              // Couleur dynamique selon le statut du manager
+              Color statusColor = Colors.orange;
+              if (managerStatus == 'Accepté') statusColor = Colors.green;
+              if (managerStatus == 'Refusé') statusColor = Colors.red;
 
               return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                child: ListTile(
-                  title: Text(
-                    'Demande (${typeConge == 'paye' ? 'Congé Payé' : 'Congé Sans Solde'})',
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Text(
-                    'Du : ${startDate.split('T')[0]} au : ${endDate.split('T')[0]}\n'
-                    'Durée : $nbJours jour(s) | Statut : $status',
-                  ),
-                  isThreeLine: true,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                elevation: 3,
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.check_circle, color: Colors.green),
-                        onPressed: () => _updateStatus(
-                          docId: docId,
-                          newStatus: 'Approuvé',
-                          userId: userId,
-                          typeConge: typeConge,
-                          nbJours: nbJours,
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            employeeName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          Chip(
+                            label: Text(
+                              managerStatus,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
+                            ),
+                            backgroundColor: statusColor,
+                          ),
+                        ],
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.cancel, color: Colors.red),
-                        onPressed: () => _updateStatus(
-                          docId: docId,
-                          newStatus: 'Refusé',
-                          userId: userId,
-                          typeConge: typeConge,
-                          nbJours: nbJours,
-                        ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Motif : $reason\nDu : ${startDate.day}/${startDate.month}/${startDate.year} au ${endDate.day}/${endDate.month}/${endDate.year}',
+                        style: const TextStyle(height: 1.4),
+                      ),
+                      const Divider(height: 20),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          // Bouton Refuser
+                          OutlinedButton.icon(
+                            onPressed: () => _updateManagerStatus(doc.id, 'Refusé'),
+                            icon: const Icon(Icons.close, color: Colors.red, size: 18),
+                            label: const Text('Refuser', style: TextStyle(color: Colors.red)),
+                          ),
+                          const SizedBox(width: 8),
+                          // Bouton Accepter
+                          ElevatedButton.icon(
+                            onPressed: () => _updateManagerStatus(doc.id, 'Accepté'),
+                            icon: const Icon(Icons.check, color: Colors.white, size: 18),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                            ),
+                            label: const Text('Accepter', style: TextStyle(color: Colors.white)),
+                          ),
+                          const SizedBox(width: 8),
+                          // Bouton Modifier les dates
+                          IconButton(
+                            icon: const Icon(
+                              Icons.edit_calendar,
+                              color: Color(0xFF3F51B5),
+                              size: 26,
+                            ),
+                            tooltip: 'Modifier les dates',
+                            onPressed: () => _editLeaveDates(doc.id, startDate, endDate),
+                          ),
+                        ],
                       ),
                     ],
                   ),
